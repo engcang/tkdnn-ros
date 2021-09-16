@@ -1,0 +1,3 @@
+[submodule "tkDNN"]
+	path = tkDNN
+	url = git@github.com:ceccocats/tkDNN
