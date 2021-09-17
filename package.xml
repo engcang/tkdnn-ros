@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>tkdnn-ros</name>
+  <name>tkdnn_ros</name>
   <version>0.0.0</version>
-  <description>The tkdnn-ros package</description>
+  <description>The tkdnn ROS package</description>
   <maintainer email="eungchang_mason@kaist.ac.kr">Eungchang Mason Lee</maintainer>
   <license>TODO</license>
 
@@ -11,12 +11,13 @@
   <build_depend>roslib</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>cv_bridge</build_depend>
-
+  <build_depend>message_generation</build_depend>
 
   <exec_depend>roscpp</exec_depend>
   <exec_depend>roslib</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
 
   <export>
     <!-- Other tools can request additional information be placed here -->

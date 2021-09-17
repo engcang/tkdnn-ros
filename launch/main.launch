@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+
+  <param name="/rt_file" value="yolo4tiny_fp32.rt"/>
+  <param name="/image_topic" value="/image/compressed"/> 
+  <param name="/class_number" value="80"/>
+  <param name="/confidence_thresh" value="0.7"/>
+
+  <node name="tkdnn_ros_node" pkg="tkdnn_ros" type="tkdnn_ros_node" output="screen"/>
+  <!-- launch-prefix="gdb -ex run --> <!--args" -->
+
+</launch>

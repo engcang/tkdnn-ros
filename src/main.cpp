@@ -6,11 +6,11 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "oakd_ros_node");
   ros::NodeHandle n("~");
 
-  tkdnn_ros tkdnn(n);
+  tkdnn_ros_class tkdnn(n);
 
   signal(SIGINT, signal_handler); // to exit program when ctrl+c
 
-  ros::AsyncSpinner spinner(7); // Use 7 threads -> 3 callbacks + 4 Timer callbacks
+  ros::AsyncSpinner spinner(2); // Use 2 threads -> 1 callbacks + 2 publisher
   spinner.start();
   ros::waitForShutdown();
 
