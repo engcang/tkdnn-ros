@@ -51,6 +51,11 @@ class tkdnn_ros_class{
     ros::Subscriber img_sub;
     ros::Publisher detected_img_pub, bounding_box_pub;
 
+    ///// rectification, optional
+    bool need_image_recitifaction, fisheye_image;
+    vector<double> intrinsic, distortion, resolution;
+    cv::Mat map1, map2;
+
     void img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg);
 
     tkdnn_ros_class(ros::NodeHandle& n) : nh(n){
@@ -60,15 +65,34 @@ class tkdnn_ros_class{
       nh.param("/class_number", class_number, 1);
       nh.param<float>("/confidence_thresh", confidence_thresh, 0.9);
 
-      ///// sub pub
-      img_sub = nh.subscribe<sensor_msgs::CompressedImage>(image_topic, 10, &tkdnn_ros_class::img_callback, this);
-      detected_img_pub = nh.advertise<sensor_msgs::CompressedImage>("/detected_output"+image_topic, 10);
-      bounding_box_pub = nh.advertise<tkdnn_ros::bboxes>("/detected_bounding_boxes", 10);
+      nh.param<bool>("/need_image_recitifaction", need_image_recitifaction, false);
+      nh.param<bool>("/fisheye_image", fisheye_image, false);
+      nh.getParam("/intrinsic", intrinsic);
+      nh.getParam("/distortion", distortion);
+      nh.getParam("/resolution", resolution);
+
+      if (need_image_recitifaction){
+        cv::Size img_size = {resolution[0], resolution[1]};
+        double cm[] = {intrinsic[0], intrinsic[1], intrinsic[2], intrinsic[3], intrinsic[4], intrinsic[5], intrinsic[6], intrinsic[7], intrinsic[8]};
+        double dm[] = {distortion[0], distortion[1], distortion[2], distortion[3]};
+        cv::Mat K_intrinsic = cv::Mat(3,3,CV_64FC1,(void*)cm);
+        cv::Mat D_distortion = cv::Mat(1,4,CV_64FC1,(void*)dm);
+        if (fisheye_image)
+          cv::fisheye::initUndistortRectifyMap(K_intrinsic, D_distortion, cv::Mat(), K_intrinsic, img_size, CV_32FC1, map1, map2);
+        else
+          cv::initUndistortRectifyMap(K_intrinsic, D_distortion, cv::Mat(), K_intrinsic, img_size, CV_32FC1, map1, map2);
+      }
 
       path = ros::package::getPath("tkdnn_ros");
       detNN = &yolo;
       detNN->init(path+"/rt_file/"+rt_file, class_number, 1, confidence_thresh);
       //detNN->init(rt_file, class_number, batch size, confidence_thresh);
+
+      ///// sub pub
+      img_sub = nh.subscribe<sensor_msgs::CompressedImage>(image_topic, 10, &tkdnn_ros_class::img_callback, this);
+      detected_img_pub = nh.advertise<sensor_msgs::CompressedImage>("/detected_output"+image_topic, 10);
+      bounding_box_pub = nh.advertise<tkdnn_ros::bboxes>("/detected_bounding_boxes", 10);
+
 
       ROS_WARN("class heritated, starting node...");
     }
@@ -77,14 +101,18 @@ class tkdnn_ros_class{
 
 
 void tkdnn_ros_class::img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg){
-  cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg);
+  cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
+
+  cv::Mat img_in = img_ptr->image;
+  if (need_image_recitifaction)
+    cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
 
   batch_dnn_input.clear();
   batch_frame.clear();
 
-  batch_frame.push_back(img_ptr->image);
+  batch_frame.push_back(img_in);
   // this will be resized to the net format
-  batch_dnn_input.push_back(img_ptr->image.clone());
+  batch_dnn_input.push_back(img_in.clone());
 
   detNN->update(batch_dnn_input, 1); //batch_size
   detNN->draw(batch_frame);
@@ -93,10 +121,10 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::CompressedImage::ConstPtr&
 
   char fps[40];
   sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-  cv::putText(out_image, string(fps), cv::Point(0, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 120), 2);
+  cv::putText(out_image, string(fps), cv::Point(0, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
 
   header.stamp = ros::Time::now();
-  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);;
+  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
   bridge_img.toCompressedImageMsg(img_msg);
   detected_img_pub.publish(img_msg);
 

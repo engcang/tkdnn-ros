@@ -2,9 +2,19 @@
 <launch>
 
   <param name="/rt_file" value="yolo4tiny_fp32.rt"/>
-  <param name="/image_topic" value="/image/compressed"/> 
+  <param name="/image_topic" value="/camera/fisheye1/image_raw/compressed"/> 
   <param name="/class_number" value="80"/>
-  <param name="/confidence_thresh" value="0.7"/>
+  <param name="/confidence_thresh" value="0.6"/>
+
+
+<!-- Optional parameters -->
+  <param name="/need_image_recitifaction" value="true"/> <!-- if not used, false -->
+  <param name="/fisheye_image" value="true"/> <!-- true: pinhole-equidistant, false: pinhole-radtan -->
+
+<!-- Only needed when rectification is true -->
+  <rosparam param="/intrinsic">[290.19355172609295, 0., 429.9552779379673, 0., 289.86739763687336, 399.7752580816036, 0., 0., 1.]</rosparam>
+  <rosparam param="/distortion">[-0.016513830244121567, 0.06263513025651736, -0.0559402093096744, 0.011124267777846608]</rosparam>
+  <rosparam param="/resolution">[848, 800]</rosparam>   <!--width*height-->
 
   <node name="tkdnn_ros_node" pkg="tkdnn_ros" type="tkdnn_ros_node" output="screen"/>
   <!-- launch-prefix="gdb -ex run --> <!--args" -->

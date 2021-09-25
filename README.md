@@ -1,6 +1,7 @@
 # tkDNN-ROS
 + `YOLO` object detection with `ROS` and `TensorRT` using [`tkDNN`](https://github.com/ceccocats/tkDNN)
 	+ Currently, only `YOLO` is supported.
+	+ (Optional) Image rectification is added - supports `pinhole-radtan`, `pinhole-equidistant` (Fisheye)
 
 <br>
 
