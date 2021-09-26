@@ -36,7 +36,8 @@ class tkdnn_ros_class{
 
     ///// tkDNN
     std_msgs::Header header;
-    sensor_msgs::CompressedImage img_msg;
+    sensor_msgs::CompressedImage comp_img_msg;
+    sensor_msgs::Image img_msg;
     string path, rt_file, image_topic;
     int class_number;
     float confidence_thresh;
@@ -52,15 +53,17 @@ class tkdnn_ros_class{
     ros::Publisher detected_img_pub, bounding_box_pub;
 
     ///// rectification, optional
-    bool need_image_recitifaction, fisheye_image;
+    bool image_compressed, need_image_recitifaction, fisheye_image;
     vector<double> intrinsic, distortion, resolution;
     cv::Mat map1, map2;
 
-    void img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg);
+    void img_callback(const sensor_msgs::Image::ConstPtr& msg);
+    void comp_img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg);
 
     tkdnn_ros_class(ros::NodeHandle& n) : nh(n){
       ///// params
-      nh.param<std::string>("/rt_file", rt_file, "yolo4tiny_fp32.rt");
+      nh.param<bool>("/image_compressed", image_compressed, true);
+      nh.param<std::string>("/rt_file", rt_file, "/rt_file/yolo4tiny_fp32.rt");
       nh.param<std::string>("/image_topic", image_topic, "/image_raw");
       nh.param("/class_number", class_number, 1);
       nh.param<float>("/confidence_thresh", confidence_thresh, 0.9);
@@ -85,12 +88,18 @@ class tkdnn_ros_class{
 
       path = ros::package::getPath("tkdnn_ros");
       detNN = &yolo;
-      detNN->init(path+"/rt_file/"+rt_file, class_number, 1, confidence_thresh);
+      detNN->init(path+rt_file, class_number, 1, confidence_thresh);
       //detNN->init(rt_file, class_number, batch size, confidence_thresh);
 
       ///// sub pub
-      img_sub = nh.subscribe<sensor_msgs::CompressedImage>(image_topic, 10, &tkdnn_ros_class::img_callback, this);
-      detected_img_pub = nh.advertise<sensor_msgs::CompressedImage>("/detected_output"+image_topic, 10);
+      if (image_compressed){
+        img_sub = nh.subscribe<sensor_msgs::CompressedImage>(image_topic, 10, &tkdnn_ros_class::comp_img_callback, this);
+        detected_img_pub = nh.advertise<sensor_msgs::CompressedImage>("/detected_output"+image_topic, 10);
+      }
+      else{
+        img_sub = nh.subscribe<sensor_msgs::Image>(image_topic, 10, &tkdnn_ros_class::img_callback, this);
+        detected_img_pub = nh.advertise<sensor_msgs::Image>("/detected_output"+image_topic, 10); 
+      }
       bounding_box_pub = nh.advertise<tkdnn_ros::bboxes>("/detected_bounding_boxes", 10);
 
 
@@ -99,8 +108,7 @@ class tkdnn_ros_class{
 };
 
 
-
-void tkdnn_ros_class::img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg){
+void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg){
   cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
 
   cv::Mat img_in = img_ptr->image;
@@ -125,7 +133,54 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::CompressedImage::ConstPtr&
 
   header.stamp = ros::Time::now();
   cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-  bridge_img.toCompressedImageMsg(img_msg);
+  bridge_img.toCompressedImageMsg(comp_img_msg);
+  detected_img_pub.publish(comp_img_msg);
+
+  tkdnn_ros::bboxes out_boxes;
+  for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
+    tkdnn_ros::bbox out_box;
+    tk::dnn::box b = detNN->batchDetected[0][i];
+
+    out_box.score = b.prob;
+    out_box.x = b.x;
+    out_box.y = b.y;
+    out_box.width = b.w;
+    out_box.height = b.h;
+    out_box.id = b.cl;
+    out_box.Class = detNN->classesNames[b.cl];
+    out_boxes.bboxes.push_back(out_box);
+  }
+  if (out_boxes.bboxes.size()>0)
+    bounding_box_pub.publish(out_boxes);
+}
+
+
+void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
+  cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
+
+  cv::Mat img_in = img_ptr->image;
+  if (need_image_recitifaction)
+    cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
+
+  batch_dnn_input.clear();
+  batch_frame.clear();
+
+  batch_frame.push_back(img_in);
+  // this will be resized to the net format
+  batch_dnn_input.push_back(img_in.clone());
+
+  detNN->update(batch_dnn_input, 1); //batch_size
+  detNN->draw(batch_frame);
+  
+  cv::Mat out_image = batch_frame.back();
+
+  char fps[40];
+  sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
+  cv::putText(out_image, string(fps), cv::Point(0, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+
+  header.stamp = ros::Time::now();
+  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
+  bridge_img.toImageMsg(img_msg);
   detected_img_pub.publish(img_msg);
 
   tkdnn_ros::bboxes out_boxes;
@@ -142,7 +197,8 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::CompressedImage::ConstPtr&
     out_box.Class = detNN->classesNames[b.cl];
     out_boxes.bboxes.push_back(out_box);
   }
-  bounding_box_pub.publish(out_boxes);
+  if (out_boxes.bboxes.size()>0)
+    bounding_box_pub.publish(out_boxes);
 }
 
 

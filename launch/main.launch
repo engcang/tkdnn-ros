@@ -1,8 +1,11 @@
 <?xml version="1.0"?>
 <launch>
 
-  <param name="/rt_file" value="yolo4tiny_fp32.rt"/>
-  <param name="/image_topic" value="/camera/fisheye1/image_raw/compressed"/> 
+  <!-- choose: true: compressed, false: raw -->
+  <param name="/image_compressed" value="false"/> 
+  <!-- note that .rt file should be generated on your PC, it depends on CUDA/cuDNN/TensorRT version -->
+  <param name="/rt_file" value="/rt_file/yolo4tiny_fp32.rt"/> 
+  <param name="/image_topic" value="/camera/fisheye1/image_raw"/> 
   <param name="/class_number" value="80"/>
   <param name="/confidence_thresh" value="0.6"/>
 
