@@ -2,6 +2,8 @@
 + `YOLO` object detection with `ROS` and `TensorRT` using [`tkDNN`](https://github.com/ceccocats/tkDNN)
 	+ Currently, only `YOLO` is supported.
 	+ (Optional) Image rectification is added - supports `pinhole-radtan`, `pinhole-equidistant` (Fisheye)
+    + (Optional) Downsampled inference is added (e.g. image is coming in at 30Hz but infer it upto 15Hz)
+    + (Optional) Image saving is added - save only detected image in `.jpg` format in `image` folder
 
 <br>
 
@@ -9,6 +11,81 @@
 
 
 <br>
+
+## Requirements
++ `CUDA`, `cuDNN`, `TensorRT`
++ `.rt` file, built with `.weights` and `.cfg` files
+<details><summary>[Click to see how to make `.rt` file in detail]</summary>
+
+### ● prepare `.rt file` ★much work to do★
++ Export `weight` and `cfg` file into `.bin` files as [original repo](https://github.com/ceccocats/tkDNN#how-to-export-weights)
+~~~shell
+Get the darknet (only for export, not used for detection)
+$ git clone https://git.hipert.unimore.it/fgatti/darknet.git
+If this darknet repo does not work, try with this one: 
+              https://github.com/AlexeyAB/darknet/issues/6116#issuecomment-655483646
+              https://github.com/AlexeyAB/darknet/files/4890564/darknet-master.zip
+$ cd darknet
+$ make
+$ mkdir layers debug
+$ ./darknet export <path-to-cfg-file> <path-to-weights> layers
+-> .bin files are generated in debug and layers folders
+~~~
+
++ Build `.rt` file, which can generate `executable file`
+~~~shell
+$ cd tkDNN/tests/darknet
+$ cp yolo4.cpp <name_you_want>.cpp
+$ gedit <name_you_want>.cpp
+~~~
+~~~cpp
+std::string bin_path = "path from tkDNN/build folder"; //edit
+
+// Edit here with output layer, check exported 'layers' folder
+// e.g., for yolo v4 tiny, exported .bin file with name 'g' are 'g30.bin' and 'g37.bin'
+// files starting with 'g' are output layer
+std::vector<std::string> output_bins = {
+    bin_path + "/debug/layer30_out.bin",
+    bin_path + "/debug/layer37_out.bin"
+};
+
+// also check .cfg and .names (.txt) files directory
+std::string cfg_path  = std::string(TKDNN_PATH) + "/tests/darknet/cfg/yolo4tiny.cfg";
+std::string name_path = std::string(TKDNN_PATH) + "/tests/darknet/names/coco.names";
+~~~
+~~~shell
+$ cd tkdnn/build
+$ cmake .. && make
+
+# executable file name with <name_you_want> is generated.
+# Excute it to generate .rt file
+### it reads the .cfg and .bin files written in <name_you_want>.cpp file, so directories should be accurate
+$ ./test_<name_you_want> 
+~~~
+
+### ● Execution, refer [here](https://github.com/ceccocats/tkDNN#run-the-demo) for more detail
+~~~shell
+$ cd tkdnn/build
+$ ./demo <name_you_want>_fp32.rt ~/test_video.mp4 y 80 1 1
+(./demo <network-rt-file> <path-to-video> <kind-of-network> <number-of-classes> <n-batches> <show-flag>)
+~~~
+
+### ● Changing inference data type: **re-generate `.rt file` after export tkdnn mode**
+~~~shell
+type one of belows: (TKDNN_MODE=FP32 is default before change)
+$ export TKDNN_MODE=FP16
+$ export TKDNN_MODE=INT8
+
+and re-generate .rt file as above before execute.
+~~~
+
+---
+
+</details>
+
+
+<br>
+
 
 ## How to install
 
@@ -56,7 +133,7 @@ $ . ~/.bashrc
 
 ## How to run
 
-+ Make sure you have `.rt` files, refer [here, my other repo](https://github.com/engcang/ros-yolo-sort/tree/master/YOLO_and_ROS_ver#-tensorrttkdnn-ver-2)
++ Make sure you have `.rt` files with your `CUDA`, `cuDNN`, `TensorRT` version.
 
 + change parameters in `main.launch` file
 

@@ -2,6 +2,7 @@
 #define TKDNNROS_H
 
 ///// common headers
+#include <time.h>
 #include <ros/ros.h>
 #include <ros/package.h>
 
@@ -39,7 +40,7 @@ class tkdnn_ros_class{
     sensor_msgs::CompressedImage comp_img_msg;
     sensor_msgs::Image img_msg;
     string path, rt_file, image_topic;
-    int class_number;
+    int class_number, downsampling_inference, counter=0;
     float confidence_thresh;
     std::vector<cv::Mat> batch_frame;
     std::vector<cv::Mat> batch_dnn_input;
@@ -53,7 +54,7 @@ class tkdnn_ros_class{
     ros::Publisher detected_img_pub, bounding_box_pub;
 
     ///// rectification, optional
-    bool image_compressed, need_image_recitifaction, fisheye_image;
+    bool image_compressed, save_image, need_image_recitifaction, fisheye_image;
     vector<double> intrinsic, distortion, resolution;
     cv::Mat map1, map2;
 
@@ -68,6 +69,8 @@ class tkdnn_ros_class{
       nh.param("/class_number", class_number, 1);
       nh.param<float>("/confidence_thresh", confidence_thresh, 0.9);
 
+      nh.param<bool>("/save_image", save_image, false);
+      nh.param("/downsampling_inference", downsampling_inference, 1);
       nh.param<bool>("/need_image_recitifaction", need_image_recitifaction, false);
       nh.param<bool>("/fisheye_image", fisheye_image, false);
       nh.getParam("/intrinsic", intrinsic);
@@ -109,96 +112,120 @@ class tkdnn_ros_class{
 
 
 void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg){
-  cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
+  counter++;
+  if (counter%downsampling_inference==0){
+    cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
 
-  cv::Mat img_in = img_ptr->image;
-  if (need_image_recitifaction)
-    cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
+    cv::Mat img_in = img_ptr->image;
+    if (need_image_recitifaction)
+      cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
 
-  batch_dnn_input.clear();
-  batch_frame.clear();
+    batch_dnn_input.clear();
+    batch_frame.clear();
 
-  batch_frame.push_back(img_in);
-  // this will be resized to the net format
-  batch_dnn_input.push_back(img_in.clone());
+    batch_frame.push_back(img_in);
+    // this will be resized to the net format
+    batch_dnn_input.push_back(img_in.clone());
 
-  detNN->update(batch_dnn_input, 1); //batch_size
-  detNN->draw(batch_frame);
-  
-  cv::Mat out_image = batch_frame.back();
+    detNN->update(batch_dnn_input, 1); //batch_size
+    detNN->draw(batch_frame);
+    
+    cv::Mat out_image = batch_frame.back();
 
-  char fps[40];
-  sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-  cv::putText(out_image, string(fps), cv::Point(0, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+    char fps[40], date_time[40];
+    sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
+    cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+    time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
+    if (t){ // not NULL
+      sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
+      cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
+    }
 
-  header.stamp = ros::Time::now();
-  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-  bridge_img.toCompressedImageMsg(comp_img_msg);
-  detected_img_pub.publish(comp_img_msg);
+    header.stamp = ros::Time::now();
+    cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
+    bridge_img.toCompressedImageMsg(comp_img_msg);
+    detected_img_pub.publish(comp_img_msg);
 
-  tkdnn_ros::bboxes out_boxes;
-  for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
-    tkdnn_ros::bbox out_box;
-    tk::dnn::box b = detNN->batchDetected[0][i];
+    tkdnn_ros::bboxes out_boxes;
+    for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
+      tkdnn_ros::bbox out_box;
+      tk::dnn::box b = detNN->batchDetected[0][i];
 
-    out_box.score = b.prob;
-    out_box.x = b.x;
-    out_box.y = b.y;
-    out_box.width = b.w;
-    out_box.height = b.h;
-    out_box.id = b.cl;
-    out_box.Class = detNN->classesNames[b.cl];
-    out_boxes.bboxes.push_back(out_box);
+      out_box.score = b.prob;
+      out_box.x = b.x;
+      out_box.y = b.y;
+      out_box.width = b.w;
+      out_box.height = b.h;
+      out_box.id = b.cl;
+      out_box.Class = detNN->classesNames[b.cl];
+      out_boxes.bboxes.push_back(out_box);
+    }
+    if (out_boxes.bboxes.size()>0){
+      bounding_box_pub.publish(out_boxes);
+      if (save_image && t){
+        cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
+      }
+    }
   }
-  if (out_boxes.bboxes.size()>0)
-    bounding_box_pub.publish(out_boxes);
 }
 
 
 void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
-  cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
+  counter++;
+  if (counter%downsampling_inference==0){
+    cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
 
-  cv::Mat img_in = img_ptr->image;
-  if (need_image_recitifaction)
-    cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
+    cv::Mat img_in = img_ptr->image;
+    if (need_image_recitifaction)
+      cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
 
-  batch_dnn_input.clear();
-  batch_frame.clear();
+    batch_dnn_input.clear();
+    batch_frame.clear();
 
-  batch_frame.push_back(img_in);
-  // this will be resized to the net format
-  batch_dnn_input.push_back(img_in.clone());
+    batch_frame.push_back(img_in);
+    // this will be resized to the net format
+    batch_dnn_input.push_back(img_in.clone());
 
-  detNN->update(batch_dnn_input, 1); //batch_size
-  detNN->draw(batch_frame);
-  
-  cv::Mat out_image = batch_frame.back();
+    detNN->update(batch_dnn_input, 1); //batch_size
+    detNN->draw(batch_frame);
+    
+    cv::Mat out_image = batch_frame.back();
 
-  char fps[40];
-  sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-  cv::putText(out_image, string(fps), cv::Point(0, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+    char fps[40], date_time[40];
+    sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
+    cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+    time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
+    if (t){ // not NULL
+      sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
+      cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
+    }
 
-  header.stamp = ros::Time::now();
-  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-  bridge_img.toImageMsg(img_msg);
-  detected_img_pub.publish(img_msg);
+    header.stamp = ros::Time::now();
+    cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
+    bridge_img.toImageMsg(img_msg);
+    detected_img_pub.publish(img_msg);
 
-  tkdnn_ros::bboxes out_boxes;
-  for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
-    tkdnn_ros::bbox out_box;
-    tk::dnn::box b = detNN->batchDetected[0][i];
+    tkdnn_ros::bboxes out_boxes;
+    for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
+      tkdnn_ros::bbox out_box;
+      tk::dnn::box b = detNN->batchDetected[0][i];
 
-    out_box.score = b.prob;
-    out_box.x = b.x;
-    out_box.y = b.y;
-    out_box.width = b.w;
-    out_box.height = b.h;
-    out_box.id = b.cl;
-    out_box.Class = detNN->classesNames[b.cl];
-    out_boxes.bboxes.push_back(out_box);
+      out_box.score = b.prob;
+      out_box.x = b.x;
+      out_box.y = b.y;
+      out_box.width = b.w;
+      out_box.height = b.h;
+      out_box.id = b.cl;
+      out_box.Class = detNN->classesNames[b.cl];
+      out_boxes.bboxes.push_back(out_box);
+    }
+    if (out_boxes.bboxes.size()>0){
+      bounding_box_pub.publish(out_boxes);
+      if (save_image && t){
+        cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
+      }
+    }
   }
-  if (out_boxes.bboxes.size()>0)
-    bounding_box_pub.publish(out_boxes);
 }
 
 
