@@ -141,7 +141,8 @@ void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::Cons
       cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
     }
 
-    header.stamp = ros::Time::now();
+    // header.stamp = ros::Time::now();
+    header.stamp = msg->header.stamp;
     cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
     bridge_img.toCompressedImageMsg(comp_img_msg);
     detected_img_pub.publish(comp_img_msg);
@@ -200,7 +201,8 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
       cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
     }
 
-    header.stamp = ros::Time::now();
+    // header.stamp = ros::Time::now();
+    header.stamp = msg->header.stamp;
     cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
     bridge_img.toImageMsg(img_msg);
     detected_img_pub.publish(img_msg);
