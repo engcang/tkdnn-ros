@@ -132,23 +132,8 @@ void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::Cons
     
     cv::Mat out_image = batch_frame.back();
 
-    char fps[40], date_time[40];
-    sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-    cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
-    time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
-    if (t){ // not NULL
-      sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
-      cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
-    }
-
-    // header.stamp = ros::Time::now();
-    header.stamp = msg->header.stamp;
-    cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-    bridge_img.toCompressedImageMsg(comp_img_msg);
-    detected_img_pub.publish(comp_img_msg);
-
     tkdnn_ros::bboxes out_boxes;
-    out_boxes.header.stamp = header.stamp;
+    out_boxes.header.stamp = msg->header.stamp;
     for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
       tkdnn_ros::bbox out_box;
       tk::dnn::box b = detNN->batchDetected[0][i];
@@ -163,6 +148,18 @@ void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::Cons
       out_boxes.bboxes.push_back(out_box);
     }
     if (out_boxes.bboxes.size()>0){
+      char fps[40], date_time[40];
+      sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
+      cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+      time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
+      if (t){ // not NULL
+        sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
+        cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
+      }
+      header.stamp = msg->header.stamp;
+      cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
+      bridge_img.toCompressedImageMsg(comp_img_msg);
+      detected_img_pub.publish(comp_img_msg);
       bounding_box_pub.publish(out_boxes);
       if (save_image && t){
         cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
@@ -193,23 +190,8 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
     
     cv::Mat out_image = batch_frame.back();
 
-    char fps[40], date_time[40];
-    sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-    cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
-    time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
-    if (t){ // not NULL
-      sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
-      cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
-    }
-
-    // header.stamp = ros::Time::now();
-    header.stamp = msg->header.stamp;
-    cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-    bridge_img.toImageMsg(img_msg);
-    detected_img_pub.publish(img_msg);
-
     tkdnn_ros::bboxes out_boxes;
-    out_boxes.header.stamp = header.stamp;
+    out_boxes.header.stamp = msg->header.stamp;
     for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
       tkdnn_ros::bbox out_box;
       tk::dnn::box b = detNN->batchDetected[0][i];
@@ -224,6 +206,18 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
       out_boxes.bboxes.push_back(out_box);
     }
     if (out_boxes.bboxes.size()>0){
+      char fps[40], date_time[40];
+      sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
+      cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
+      time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
+      if (t){ // not NULL
+        sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
+        cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
+      }
+      header.stamp = msg->header.stamp;
+      cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
+      bridge_img.toImageMsg(img_msg);
+      detected_img_pub.publish(img_msg);
       bounding_box_pub.publish(out_boxes);
       if (save_image && t){
         cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
