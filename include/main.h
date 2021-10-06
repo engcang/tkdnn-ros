@@ -148,6 +148,7 @@ void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::Cons
     detected_img_pub.publish(comp_img_msg);
 
     tkdnn_ros::bboxes out_boxes;
+    out_boxes.header.stamp = header.stamp;
     for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
       tkdnn_ros::bbox out_box;
       tk::dnn::box b = detNN->batchDetected[0][i];
@@ -208,6 +209,7 @@ void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
     detected_img_pub.publish(img_msg);
 
     tkdnn_ros::bboxes out_boxes;
+    out_boxes.header.stamp = header.stamp;
     for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
       tkdnn_ros::bbox out_box;
       tk::dnn::box b = detNN->batchDetected[0][i];

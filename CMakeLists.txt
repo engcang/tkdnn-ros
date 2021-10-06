@@ -16,6 +16,7 @@ endif()
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
+  std_msgs
   sensor_msgs
   cv_bridge
   message_generation
