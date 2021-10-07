@@ -4,18 +4,20 @@
   <!-- choose: true: compressed, false: raw -->
   <param name="/image_compressed" value="false"/> 
   <!-- note that .rt file should be generated on your PC, it depends on CUDA/cuDNN/TensorRT version -->
-  <param name="/rt_file" value="/rt_file/yolo4tiny_fp32.rt"/> 
-  <param name="/image_topic" value="/image"/> 
+<!--  <param name="/rt_file" value="/rt_file/addtiny3l_fp32.rt"/>-->
+  <param name="/rt_file" value="/rt_file/yolo4tiny_fp32.rt"/>  
+<!--  <param name="/image_topic" value="/camera/fisheye1/image_raw"/>-->
+  <param name="/image_topic" value="/d455/stereo_ir/left/image_raw"/>  
   <param name="/class_number" value="80"/>
-  <param name="/confidence_thresh" value="0.6"/>
+  <param name="/confidence_thresh" value="0.4"/>
 
 
 <!-- Optional parameters -->
   <!-- Infer the every "downsampling_inference" image messages, if image is coming in at 30Hz, inferring at 30Hz/downsampling_inference. -->
   <!-- e.g., if it is set 2, inferring at 15Hz (30/2=15), integer -->
-  <param name="/downsampling_inference" value="5"/> 
+  <param name="/downsampling_inference" value="6"/> 
 
-  <param name="/save_image" value="true"/> <!-- Save image in "image" folder. if not used, false -->
+  <param name="/save_image" value="false"/> <!-- Save image in "image" folder. if not used, false -->
 
   <param name="/need_image_recitifaction" value="false"/> <!-- if not used, false -->
   <param name="/fisheye_image" value="true"/> <!-- true: pinhole-equidistant, false: pinhole-radtan -->
