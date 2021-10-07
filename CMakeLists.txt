@@ -45,10 +45,7 @@ generate_messages(
 
 
 
-catkin_package(
-    LIBRARIES ${PROJECT_NAME}
-    CATKIN_DEPENDS roscpp roslib sensor_msgs std_msgs cv_bridge message_generation message_runtime
-)
+catkin_package()
 
 
 ###########
