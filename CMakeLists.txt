@@ -61,9 +61,11 @@ include_directories(
 )
 
 add_library( tkDNN SHARED IMPORTED)
-set_target_properties(tkDNN PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/installed/lib/libtkDNN.so)
+# set_target_properties(tkDNN PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/installed/lib/libtkDNN.so)
+set_target_properties(tkDNN PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/build/libtkDNN.so)
 add_library( kernels SHARED IMPORTED)
-set_target_properties(kernels PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/installed/lib/libkernels.so)
+# set_target_properties(kernels PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/installed/lib/libkernels.so)
+set_target_properties(kernels PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/tkDNN/build/libkernels.so)
 
 add_executable(${PROJECT_NAME}_node src/main.cpp)
 target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES} ${OpenCV_LIBS} ${tkDNN_LIBRARIES} tkDNN kernels)
