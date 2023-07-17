@@ -12,7 +12,7 @@
 
 <br>
 
-## Requirements
+## Dependencies
 + `CUDA`, `cuDNN`, `TensorRT` (version **8**)
 + `.rt` file, built with `.weights` and `.cfg` files
 <details><summary>[Click to see how to make `.rt` file in detail]</summary>
