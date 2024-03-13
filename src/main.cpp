@@ -1,12 +1,17 @@
 #include "main.h"
-
+#include <signal.h>
+void signal_handler(sig_atomic_t s)
+{
+  std::cout << "You pressed Ctrl + C, exiting" << std::endl;
+  exit(1);
+}
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "oakd_ros_node");
+  ros::init(argc, argv, "tkdnn_ros_node");
   ros::NodeHandle n("~");
 
-  tkdnn_ros_class tkdnn(n);
+  TkdnnYoloRos tkdnnyoloros_(n);
 
   signal(SIGINT, signal_handler); // to exit program when ctrl+c
 

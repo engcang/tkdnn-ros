@@ -1,8 +1,8 @@
-#ifndef TKDNNROS_H
-#define TKDNNROS_H
+#ifndef TKDNN_YOLO_ROS_H
+#define TKDNN_YOLO_ROS_H
 
 ///// common headers
-#include <time.h>
+#include <ctime>
 #include <ros/ros.h>
 #include <ros/package.h>
 
@@ -14,218 +14,190 @@
 #include <opencv2/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
 
-
 ///// tkDNN
 #include "Yolo3Detection.h"
 #include <tkdnn_ros/bboxes.h>
 
 
-///// utils
-#include <signal.h>
-void signal_handler(sig_atomic_t s) {
-  std::cout << "You pressed Ctrl + C, exiting" << std::endl;
-  exit(1);
-}
-
-using namespace std;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-class tkdnn_ros_class{
-  public:
-
+class TkdnnYoloRos
+{
+private:
     ///// tkDNN
-    std_msgs::Header header;
-    sensor_msgs::CompressedImage comp_img_msg;
-    sensor_msgs::Image img_msg;
-    string path, rt_file, image_topic;
-    int class_number, downsampling_inference, counter=0;
-    float confidence_thresh;
-    std::vector<cv::Mat> batch_frame;
-    std::vector<cv::Mat> batch_dnn_input;
-
-    tk::dnn::Yolo3Detection yolo;
-    tk::dnn::DetectionNN *detNN; 
-
-    ///// ros and tf
-    ros::NodeHandle nh;
-    ros::Subscriber img_sub;
-    ros::Publisher detected_img_pub, bounding_box_pub;
-
+    std::string m_package_path;
+    int m_downsampling_inference, m_counter=0;
+    tk::dnn::Yolo3Detection m_yolo;
+    tk::dnn::DetectionNN *m_detNN; 
     ///// rectification, optional
-    bool image_compressed, save_image, need_image_recitifaction, fisheye_image;
-    vector<double> intrinsic, distortion, resolution;
-    cv::Mat map1, map2;
-
-    void img_callback(const sensor_msgs::Image::ConstPtr& msg);
-    void comp_img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg);
-
-    tkdnn_ros_class(ros::NodeHandle& n) : nh(n){
-      ///// params
-      nh.param<bool>("/image_compressed", image_compressed, true);
-      nh.param<std::string>("/rt_file", rt_file, "/rt_file/yolo4tiny_fp32.rt");
-      nh.param<std::string>("/image_topic", image_topic, "/image_raw");
-      nh.param("/class_number", class_number, 1);
-      nh.param<float>("/confidence_thresh", confidence_thresh, 0.9);
-
-      nh.param<bool>("/save_image", save_image, false);
-      nh.param("/downsampling_inference", downsampling_inference, 1);
-      nh.param<bool>("/need_image_recitifaction", need_image_recitifaction, false);
-      nh.param<bool>("/fisheye_image", fisheye_image, false);
-      nh.getParam("/intrinsic", intrinsic);
-      nh.getParam("/distortion", distortion);
-      nh.getParam("/resolution", resolution);
-
-      if (need_image_recitifaction){
-        cv::Size img_size = {resolution[0], resolution[1]};
-        double cm[] = {intrinsic[0], intrinsic[1], intrinsic[2], intrinsic[3], intrinsic[4], intrinsic[5], intrinsic[6], intrinsic[7], intrinsic[8]};
-        double dm[] = {distortion[0], distortion[1], distortion[2], distortion[3]};
-        cv::Mat K_intrinsic = cv::Mat(3,3,CV_64FC1,(void*)cm);
-        cv::Mat D_distortion = cv::Mat(1,4,CV_64FC1,(void*)dm);
-        if (fisheye_image)
-          cv::fisheye::initUndistortRectifyMap(K_intrinsic, D_distortion, cv::Mat(), K_intrinsic, img_size, CV_32FC1, map1, map2);
-        else
-          cv::initUndistortRectifyMap(K_intrinsic, D_distortion, cv::Mat(), K_intrinsic, img_size, CV_32FC1, map1, map2);
-      }
-
-      path = ros::package::getPath("tkdnn_ros");
-      detNN = &yolo;
-      detNN->init(path+rt_file, class_number, 1, confidence_thresh);
-      //detNN->init(rt_file, class_number, batch size, confidence_thresh);
-
-      ///// sub pub
-      if (image_compressed){
-        img_sub = nh.subscribe<sensor_msgs::CompressedImage>(image_topic, 10, &tkdnn_ros_class::comp_img_callback, this);
-        detected_img_pub = nh.advertise<sensor_msgs::CompressedImage>("/detected_output"+image_topic, 10);
-      }
-      else{
-        img_sub = nh.subscribe<sensor_msgs::Image>(image_topic, 10, &tkdnn_ros_class::img_callback, this);
-        detected_img_pub = nh.advertise<sensor_msgs::Image>("/detected_output"+image_topic, 10); 
-      }
-      bounding_box_pub = nh.advertise<tkdnn_ros::bboxes>("/detected_bounding_boxes", 10);
-
-
-      ROS_WARN("class heritated, starting node...");
-    }
+    bool m_image_compressed, m_save_image, m_image_rectification_enabled;
+    cv::Mat m_img_map1, m_img_map2;
+    ///// ros and tf
+    ros::NodeHandle m_nh;
+    ros::Subscriber m_img_sub;
+    ros::Publisher m_detected_img_pub, m_bounding_box_pub;
+    ///// Functions
+    void imageCallback(const sensor_msgs::Image::ConstPtr& msg);
+    void compressedImageCallback(const sensor_msgs::CompressedImage::ConstPtr& msg);
+    void processImage(cv::Mat& img_in, const double& time, const bool& is_compressed);
+public:
+    TkdnnYoloRos(const ros::NodeHandle& n); // constructor
+    ~TkdnnYoloRos(){}; // destructor
 };
 
-
-void tkdnn_ros_class::comp_img_callback(const sensor_msgs::CompressedImage::ConstPtr& msg){
-  counter++;
-  if (counter%downsampling_inference==0){
-    cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
-
-    cv::Mat img_in = img_ptr->image;
-    if (need_image_recitifaction)
-      cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
-
-    batch_dnn_input.clear();
-    batch_frame.clear();
-
-    batch_frame.push_back(img_in);
-    // this will be resized to the net format
-    batch_dnn_input.push_back(img_in.clone());
-
-    detNN->update(batch_dnn_input, 1); //batch_size
-    detNN->draw(batch_frame);
-    
-    cv::Mat out_image = batch_frame.back();
-
-    tkdnn_ros::bboxes out_boxes;
-    out_boxes.header.stamp = msg->header.stamp;
-    for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
-      tkdnn_ros::bbox out_box;
-      tk::dnn::box b = detNN->batchDetected[0][i];
-
-      out_box.score = b.prob;
-      out_box.x = b.x;
-      out_box.y = b.y;
-      out_box.width = b.w;
-      out_box.height = b.h;
-      out_box.id = b.cl;
-      out_box.Class = detNN->classesNames[b.cl];
-      out_boxes.bboxes.push_back(out_box);
+TkdnnYoloRos::TkdnnYoloRos(const ros::NodeHandle& n) : m_nh(n)
+{
+  // temporal variables
+  bool fisheye_image_;
+  std::vector<double> intrinsic_, distortion_, resolution_;
+  std::string image_topic_, rt_file_path_;
+  int class_number_;
+  float confidence_thresh_;
+  ///// params
+  m_nh.param<bool>("/tkdnn_ros/image_compressed", m_image_compressed, true);
+  m_nh.param<std::string>("/tkdnn_ros/image_topic", image_topic_, "/image_raw");
+  m_nh.param<std::string>("/tkdnn_ros/rt_file", rt_file_path_, "/rt_file/yolo4tiny_fp32.rt");
+  m_nh.param<int>("/tkdnn_ros/class_number", class_number_, 1);
+  m_nh.param<float>("/tkdnn_ros/confidence_thresh", confidence_thresh_, 0.9);
+  m_nh.param<int>("/tkdnn_ros/downsampling_inference", m_downsampling_inference, 1);
+  m_nh.param<bool>("/tkdnn_ros/save_image", m_save_image, false);
+  m_nh.param<bool>("/tkdnn_ros/image_rectification/enable", m_image_rectification_enabled, false);
+  m_nh.param<bool>("/tkdnn_ros/image_rectification/fisheye_image", fisheye_image_, false);
+  m_nh.param<std::vector<double>>("/tkdnn_ros/image_rectification/intrinsic", intrinsic_, std::vector<double>(9, 0));
+  m_nh.param<std::vector<double>>("/tkdnn_ros/image_rectification/distortion", distortion_, std::vector<double>(4, 0));
+  m_nh.param<std::vector<double>>("/tkdnn_ros/image_rectification/resolution", resolution_, std::vector<double>(2, 0));
+  ///// Variables
+  // rectification
+  if (m_image_rectification_enabled)
+  {
+    cv::Size img_size_ = {resolution_[0], resolution_[1]};
+    double k_mat_[] = {intrinsic_[0], intrinsic_[1], intrinsic_[2], intrinsic_[3], intrinsic_[4], intrinsic_[5], intrinsic_[6], intrinsic_[7], intrinsic_[8]};
+    double d_mat_[] = {distortion_[0], distortion_[1], distortion_[2], distortion_[3]};
+    cv::Mat K_intrinsic_ = cv::Mat(3, 3, CV_64FC1, (void*)k_mat_);
+    cv::Mat D_distortion_ = cv::Mat(1, 4, CV_64FC1, (void*)d_mat_);
+    if (fisheye_image_)
+    {
+      cv::fisheye::initUndistortRectifyMap(K_intrinsic_, D_distortion_, cv::Mat(), K_intrinsic_, img_size_, CV_32FC1, m_img_map1, m_img_map2);
     }
-    if (out_boxes.bboxes.size()>0){
-      char fps[40], date_time[40];
-      sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-      cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
-      time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
-      if (t){ // not NULL
-        sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
-        cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
-      }
-      header.stamp = msg->header.stamp;
-      cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-      bridge_img.toCompressedImageMsg(comp_img_msg);
-      detected_img_pub.publish(comp_img_msg);
-      bounding_box_pub.publish(out_boxes);
-      if (save_image && t){
-        cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
-      }
+    else
+    {
+      cv::initUndistortRectifyMap(K_intrinsic_, D_distortion_, cv::Mat(), K_intrinsic_, img_size_, CV_32FC1, m_img_map1, m_img_map2);
     }
   }
+  // tkDNN
+  m_package_path = ros::package::getPath("tkdnn_ros");
+  m_detNN = &m_yolo;
+  m_detNN->init(m_package_path + rt_file_path_, class_number_, 1, confidence_thresh_);
+  ///// sub pub
+  if (m_image_compressed)
+  {
+    m_img_sub = m_nh.subscribe<sensor_msgs::CompressedImage>(image_topic_, 10, &TkdnnYoloRos::compressedImageCallback, this);
+    m_detected_img_pub = m_nh.advertise<sensor_msgs::CompressedImage>("/tkdnn_ros/detected_output" + image_topic_, 10);
+  }
+  else
+  {
+    m_img_sub = m_nh.subscribe<sensor_msgs::Image>(image_topic_, 10, &TkdnnYoloRos::imageCallback, this);
+    m_detected_img_pub = m_nh.advertise<sensor_msgs::Image>("/tkdnn_ros/detected_output" + image_topic_, 10); 
+  }
+  m_bounding_box_pub = m_nh.advertise<tkdnn_ros::bboxes>("/tkdnn_ros/detected_bounding_boxes", 10);
+
+  ROS_WARN("class heritated, starting node...");
 }
 
+void TkdnnYoloRos::processImage(cv::Mat& img_in, const double& time, const bool& is_compressed)
+{
+  // prepare image
+  if (m_image_rectification_enabled)
+  {
+    cv::remap(img_in, img_in, m_img_map1, m_img_map2, cv::INTER_LINEAR);
+  }
+  std::vector<cv::Mat> batch_frame_;
+  std::vector<cv::Mat> batch_dnn_input_;
+  batch_frame_.push_back(img_in);
+  batch_dnn_input_.push_back(img_in.clone()); // note image will be resized to the net format
 
-void tkdnn_ros_class::img_callback(const sensor_msgs::Image::ConstPtr& msg){
-  counter++;
-  if (counter%downsampling_inference==0){
-    cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);
+  // infer and draw
+  std::chrono::high_resolution_clock::time_point start_time_ = std::chrono::high_resolution_clock::now();
+  m_detNN->update(batch_dnn_input_, 1); // note batch_size = 1
+  m_detNN->draw(batch_frame_);
+  std::chrono::high_resolution_clock::time_point end_time_ = std::chrono::high_resolution_clock::now();
 
-    cv::Mat img_in = img_ptr->image;
-    if (need_image_recitifaction)
-      cv::remap(img_in, img_in, map1, map2, cv::INTER_LINEAR);
+  // handle output
+  cv::Mat out_image_ = batch_frame_.back();
+  tkdnn_ros::bboxes out_boxes_;
+  out_boxes_.header.stamp = ros::Time().fromSec(time);
+  for (size_t i = 0; i < m_detNN->batchDetected[0].size(); ++i)
+  {
+    tkdnn_ros::bbox out_box_;
+    tk::dnn::box b = m_detNN->batchDetected[0][i];
+    out_box_.score = b.prob;
+    out_box_.x = b.x;
+    out_box_.y = b.y;
+    out_box_.width = b.w;
+    out_box_.height = b.h;
+    out_box_.id = b.cl;
+    out_box_.Class = m_detNN->classesNames[b.cl];
+    out_boxes_.bboxes.push_back(out_box_);
+  }
+  
+  // publish
+  if (out_boxes_.bboxes.size()>0)
+  {
+    m_bounding_box_pub.publish(out_boxes_);
+  }
 
-    batch_dnn_input.clear();
-    batch_frame.clear();
+  // draw and publish
+  char fps_[40], date_time_[40];
+  std::sprintf(fps_, "%.2f ms infer + draw", std::chrono::duration_cast<std::chrono::microseconds>(end_time_ - start_time_).count()/1e3);
+  cv::putText(out_image_, std::string(fps_), cv::Point(5, 18), cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(255, 0, 200), 2);
 
-    batch_frame.push_back(img_in);
-    // this will be resized to the net format
-    batch_dnn_input.push_back(img_in.clone());
+  std::time_t timer_ = std::time(NULL);
+  struct std::tm* t_;
+  t_ = std::localtime(&timer_);
+  if (t_) // not NULL
+  {
+    std::sprintf(date_time_, "%d-%d-%d_%d:%d:%d__%d", t_->tm_year+1900, t_->tm_mon+1, t_->tm_mday, t_->tm_hour, t_->tm_min, t_->tm_sec, m_counter);
+    cv::putText(out_image_, std::string(date_time_), cv::Point(5, 36), cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(255, 50, 50), 2);
+  }
+  cv_bridge::CvImage bridge_img = cv_bridge::CvImage(out_boxes_.header, sensor_msgs::image_encodings::BGR8, out_image_);
+  if (is_compressed)
+  {
+    sensor_msgs::CompressedImage comp_img_msg_;
+    bridge_img.toCompressedImageMsg(comp_img_msg_);
+    m_detected_img_pub.publish(comp_img_msg_);
+  }
+  else
+  {
+    sensor_msgs::Image img_msg_;
+    bridge_img.toImageMsg(img_msg_);
+    m_detected_img_pub.publish(img_msg_);
+  }
 
-    detNN->update(batch_dnn_input, 1); //batch_size
-    detNN->draw(batch_frame);
-    
-    cv::Mat out_image = batch_frame.back();
+  // save image
+  if (m_save_image && t_)
+  {
+    cv::imwrite(m_package_path + "/image/" + date_time_ + ".jpg", out_image_);
+  }
 
-    tkdnn_ros::bboxes out_boxes;
-    out_boxes.header.stamp = msg->header.stamp;
-    for (int i = 0; i < detNN->batchDetected[0].size(); ++i){
-      tkdnn_ros::bbox out_box;
-      tk::dnn::box b = detNN->batchDetected[0][i];
-
-      out_box.score = b.prob;
-      out_box.x = b.x;
-      out_box.y = b.y;
-      out_box.width = b.w;
-      out_box.height = b.h;
-      out_box.id = b.cl;
-      out_box.Class = detNN->classesNames[b.cl];
-      out_boxes.bboxes.push_back(out_box);
-    }
-    if (out_boxes.bboxes.size()>0){
-      char fps[40], date_time[40];
-      sprintf(fps, "%.3f ms spent for inference", detNN->stats.back());
-      cv::putText(out_image, string(fps), cv::Point(5, 25), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 0, 200), 2);
-      time_t timer = time(NULL); struct tm* t; t = localtime(&timer);
-      if (t){ // not NULL
-        sprintf(date_time, "%d-%d-%d_%d:%d:%d__%d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, counter);
-        cv::putText(out_image, string(date_time), cv::Point(5, 50), cv::FONT_HERSHEY_DUPLEX, 0.6, cv::Scalar(255, 50, 50), 2);
-      }
-      header.stamp = msg->header.stamp;
-      cv_bridge::CvImage bridge_img = cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, out_image);
-      bridge_img.toImageMsg(img_msg);
-      detected_img_pub.publish(img_msg);
-      bounding_box_pub.publish(out_boxes);
-      if (save_image && t){
-        cv::imwrite(path+"/image/"+date_time+".jpg", out_image);
-      }
-    }
+  return;
+}
+void TkdnnYoloRos::compressedImageCallback(const sensor_msgs::CompressedImage::ConstPtr& msg)
+{
+  m_counter++;
+  if (m_counter % m_downsampling_inference==0)
+  {
+    cv::Mat img_in_ = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8)->image;
+    processImage(img_in_, msg->header.stamp.toSec(), true);
   }
 }
-
+void TkdnnYoloRos::imageCallback(const sensor_msgs::Image::ConstPtr& msg)
+{
+  m_counter++;
+  if (m_counter % m_downsampling_inference==0)
+  {
+    cv::Mat img_in_ = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8)->image;
+    processImage(img_in_, msg->header.stamp.toSec(), false);
+  }
+}
 
 
 #endif

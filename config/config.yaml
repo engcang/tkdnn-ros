@@ -1,0 +1,19 @@
+tkdnn_ros:
+  image_compressed: false                                     # true: use compressed image, false: use raw image
+  image_topic: "/camera/image_raw"                            # image topic
+  rt_file: "/rt_file/4tiny_fp16.rt"                           # tensorrt file
+  class_number: 80                                            # number of classes
+  confidence_thresh: 0.5                                      # confidence threshold
+  downsampling_inference: 1                                   # if image is coming in at 30Hz, inferring at 30Hz/downsampling_inference.
+                                                              # That is, if it is set 2, inferring at 15Hz (30/2=15)
+  save_image: false                                           # Save image in "image" folder. if not used, false
+  
+  image_rectification:
+    enable: false                                             # if not used, false
+    fisheye_image: false                                      # true: pinhole-equidistant, false: pinhole-radtan
+    intrinsic: [290.19355172609295, 0., 429.9552779379673,    # 3x3 matrix: fx, 0, cx, 0, fy, cy, 0, 0, 1
+                0., 289.86739763687336, 399.7752580816036,
+                0., 0., 1.]
+    distortion: [-0.016513830244121567, 0.06263513025651736,  # 1x4 matrix: k1, k2, p1, p2
+                 -0.0559402093096744, 0.011124267777846608]
+    resolution: [848, 800]                                    # width*height

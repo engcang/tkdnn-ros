@@ -1,33 +1,7 @@
 <?xml version="1.0"?>
 <launch>
 
-  <!-- choose: true: compressed, false: raw -->
-  <param name="/image_compressed" value="false"/> 
-  <!-- note that .rt file should be generated on your PC, it depends on CUDA/cuDNN/TensorRT version -->
-<!--  <param name="/rt_file" value="/rt_file/addtiny3l_fp32.rt"/>-->
-  <param name="/rt_file" value="/rt_file/yolo4tiny_fp32.rt"/>  
-<!--  <param name="/image_topic" value="/camera/fisheye1/image_raw"/>-->
-  <param name="/image_topic" value="/d455/stereo_ir/left/image_raw"/>  
-  <param name="/class_number" value="80"/>
-  <param name="/confidence_thresh" value="0.4"/>
-
-
-<!-- Optional parameters -->
-  <!-- Infer the every "downsampling_inference" image messages, if image is coming in at 30Hz, inferring at 30Hz/downsampling_inference. -->
-  <!-- e.g., if it is set 2, inferring at 15Hz (30/2=15), integer -->
-  <param name="/downsampling_inference" value="6"/> 
-
-  <param name="/save_image" value="false"/> <!-- Save image in "image" folder. if not used, false -->
-
-  <param name="/need_image_recitifaction" value="false"/> <!-- if not used, false -->
-  <param name="/fisheye_image" value="true"/> <!-- true: pinhole-equidistant, false: pinhole-radtan -->
-
-<!-- Only needed when rectification is true -->
-  <rosparam param="/intrinsic">[290.19355172609295, 0., 429.9552779379673, 0., 289.86739763687336, 399.7752580816036, 0., 0., 1.]</rosparam>
-  <rosparam param="/distortion">[-0.016513830244121567, 0.06263513025651736, -0.0559402093096744, 0.011124267777846608]</rosparam>
-  <rosparam param="/resolution">[848, 800]</rosparam>   <!--width*height-->
-
+  <rosparam command="load" file="$(find tkdnn_ros)/config/config.yaml" />
   <node name="tkdnn_ros_node" pkg="tkdnn_ros" type="tkdnn_ros_node" output="screen"/>
-  <!-- launch-prefix="gdb -ex run --> <!--args" -->
 
 </launch>
